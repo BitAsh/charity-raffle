@@ -3,7 +3,7 @@
 use ink_lang as ink;
 
 #[ink::contract]
-mod charity_raffle {
+mod raffle {
 
     #[cfg(not(feature = "ink-as-dependency"))]
     use ink_storage::collections::{HashMap as StorageHashMap, Vec as StorageVec};
@@ -14,7 +14,7 @@ mod charity_raffle {
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
-    pub struct CharityRaffle {
+    pub struct Raffle {
         /// The collected money would be sent to `beneficiary` when the second winner is drawn.
         beneficiary: AccountId,
         /// Participants.
@@ -30,22 +30,27 @@ mod charity_raffle {
     #[ink(event)]
     pub struct Played {
         /// Who played the raffle.
+        #[ink(topic)]
         who: AccountId,
         /// Transferred balance.
+        #[ink(topic)]
         balance: Balance,
     }
 
     #[ink(event)]
     pub struct Draw {
         /// The winner of this draw.
+        #[ink(topic)]
         winner: AccountId,
     }
 
     #[ink(event)]
     pub struct Finished {
         /// The beneficiary.
+        #[ink(topic)]
         beneficiary: AccountId,
         /// Total balanced sent.
+        #[ink(topic)]
         balance: Balance,
     }
 
@@ -69,7 +74,7 @@ mod charity_raffle {
     const DRAW_COUNTDOWN: Timestamp = 900000;
     const MINI_PLAYER_COUNT: u32 = 5;
 
-    impl CharityRaffle {
+    impl Raffle {
         /// Constructor that initializes the `beneficiary` value to the given address.
         #[ink(constructor)]
         pub fn new(beneficiary: AccountId) -> Self {
@@ -80,14 +85,6 @@ mod charity_raffle {
                 winners: StorageVec::new(),
                 draw_starts_at: Self::env().block_timestamp() + DRAW_COUNTDOWN,
             }
-        }
-
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
         }
 
         fn finished(&self) -> bool {
@@ -134,14 +131,12 @@ mod charity_raffle {
             }
 
             // the seed would unique even two valid draws in same block.
-            let seed = self.env().block_timestamp() * 10 + self.winners.len() as u64;
-            let hashed_seed = self.env().hash_encoded::<Blake2x128, _>(&seed.to_le_bytes());
-            let rand = self.env().random(&hashed_seed[..]);
-            let mut first_32_bits = [0u8; 4];
-            first_32_bits.copy_from_slice(&rand.as_ref()[..4]);
-            let rand_int = u32::from_le_bytes(first_32_bits);
+            let seed = (self.env().block_timestamp(), self.winners.len());
+            let hashed_seed = self.env().hash_encoded::<Blake2x128, _>(&seed);
+            let mut rand = self.env().random(&hashed_seed[..]);
+            let rand_int = rand.as_mut().iter().fold(0u8, |acc, r| acc ^ r);
 
-            let winner_index = rand_int % self.candidates.len();
+            let winner_index = rand_int as u32 % self.candidates.len();
             let winner = self.candidates[winner_index];
 
             self.winners.push(self.candidates[winner_index]);
