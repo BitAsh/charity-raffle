@@ -35,6 +35,20 @@ mod charity_raffle {
         balance: Balance,
     }
 
+    #[ink(event)]
+    pub struct Draw {
+        /// The winner of this draw.
+        winner: AccountId,
+    }
+
+    #[ink(event)]
+    pub struct Finished {
+        /// The beneficiary.
+        beneficiary: AccountId,
+        /// Total balanced sent.
+        balance: Balance,
+    }
+
     #[derive(Debug, PartialEq, Eq, scale::Encode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
@@ -128,41 +142,34 @@ mod charity_raffle {
             let rand_int = u32::from_le_bytes(first_32_bits);
 
             let winner_index = rand_int % self.candidates.len();
+            let winner = self.candidates[winner_index];
+
             self.winners.push(self.candidates[winner_index]);
             self.candidates.swap_remove_drop(winner_index);
+
+            self.env().emit_event(Draw { winner });
 
             if self.finished() {
                 // transfer all balances
                 let balance = self.participants.iter().fold(0, |acc, p| acc + p.1);
                 let _ = self.env().transfer(self.beneficiary, balance);
+
+                self.env().emit_event(Finished { beneficiary: self.beneficiary, balance });
             }
 
             Ok(())
         }
-    }
 
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
-    #[cfg(test)]
-    mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// We test if the default constructor does its job.
-        #[test]
-        fn default_works() {
-            let CharityRaffle = CharityRaffle::default();
-            assert_eq!(CharityRaffle.get(), false);
+        #[ink(message)]
+        pub fn winners(&self) -> (Option<AccountId>, Option<AccountId>) {
+            let first = self.winners.first().map(|w| w.clone());
+            let last = self.winners.last().map(|w| w.clone());
+            return (first, last)
         }
 
-        /// We test a simple use case of our contract.
-        #[test]
-        fn it_works() {
-            let mut CharityRaffle = CharityRaffle::new(false);
-            assert_eq!(CharityRaffle.get(), false);
-            CharityRaffle.flip();
-            assert_eq!(CharityRaffle.get(), true);
+        #[ink(message)]
+        pub fn beneficiary(&self) -> AccountId {
+            self.beneficiary
         }
     }
 }
