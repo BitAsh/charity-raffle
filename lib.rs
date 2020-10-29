@@ -63,8 +63,8 @@ mod raffle {
         HasPlayed,
         /// Two winners drawn, raffle finished.
         Finished,
-        /// Still in draw countdown.
-        InDrawCountdown,
+        /// Draw is not started yet.
+        DrawNotStarted,
         /// Minimum player count not reached.
         NotEnoughPlayer,
     }
@@ -83,7 +83,7 @@ mod raffle {
                 participants: StorageHashMap::new(),
                 candidates: StorageVec::new(),
                 winners: StorageVec::new(),
-                draw_starts_at: Self::env().block_timestamp() + DRAW_COUNTDOWN,
+                draw_starts_at: 0,
             }
         }
 
@@ -111,6 +111,10 @@ mod raffle {
             self.participants.insert(who, balance);
             self.candidates.push(who);
 
+            if self.participants.len() == 5 {
+                self.draw_starts_at = Self::env().block_timestamp() + DRAW_COUNTDOWN;
+            }
+
             self.env().emit_event(Played { who, balance });
 
             Ok(())
@@ -122,8 +126,8 @@ mod raffle {
                 return Err(Error::Finished);
             }
 
-            if self.env().block_timestamp() < self.draw_starts_at {
-                return Err(Error::InDrawCountdown);
+            if self.draw_starts_at == 0 || self.env().block_timestamp() < self.draw_starts_at {
+                return Err(Error::DrawNotStarted);
             }
 
             if self.participants.len() < MINI_PLAYER_COUNT {
